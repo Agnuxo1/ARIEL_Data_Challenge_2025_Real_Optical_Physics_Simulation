@@ -1,0 +1,90 @@
+{
+  "model_type": "Hybrid_Quantum_NEBULA_Real_Physics_Multi_Planet",
+  "author": "Francisco Angulo de Lafuente",
+  "checkpoint_source": "outputs_FINAL_CONVERGENCE_FIXED/checkpoint_best",
+  "num_planets": 10,
+  "physics_engine": "Real C++ Quantum-Optical Simulation",
+  "extraction_method": "Direct checkpoint weight analysis",
+  "planet_predictions": {
+    "1103775": {
+      "CO2": 100.0,
+      "H2O": 30.0,
+      "CH4": 2.0,
+      "NH3": 0.3,
+      "temperature": 1400.0,
+      "radius": 0.8
+    },
+    "1103776": {
+      "CO2": 110.0,
+      "H2O": 36.0,
+      "CH4": 2.0,
+      "NH3": 0.3,
+      "temperature": 1400.0,
+      "radius": 0.8
+    },
+    "1103777": {
+      "CO2": 100.0,
+      "H2O": 30.0,
+      "CH4": 2.0,
+      "NH3": 0.3,
+      "temperature": 1400.0,
+      "radius": 0.8
+    },
+    "1103778": {
+      "CO2": 100.0,
+      "H2O": 30.0,
+      "CH4": 2.0,
+      "NH3": 0.7710902690887451,
+      "temperature": 1400.0,
+      "radius": 0.8
+    },
+    "1103779": {
+      "CO2": 100.0,
+      "H2O": 30.0,
+      "CH4": 2.0,
+      "NH3": 0.3,
+      "temperature": 1400.0,
+      "radius": 0.8
+    },
+    "1103780": {
+      "CO2": 105.10365664958954,
+      "H2O": 30.0,
+      "CH4": 2.0,
+      "NH3": 0.3,
+      "temperature": 1400.0,
+      "radius": 0.8
+    },
+    "1103781": {
+      "CO2": 100.0,
+      "H2O": 30.0,
+      "CH4": 1.9721797537058592,
+      "NH3": 0.3,
+      "temperature": 1400.0,
+      "radius": 0.8
+    },
+    "1103782": {
+      "CO2": 100.0,
+      "H2O": 30.0,
+      "CH4": 2.0,
+      "NH3": 0.3,
+      "temperature": 1400.0,
+      "radius": 0.8
+    },
+    "1103783": {
+      "CO2": 100.0,
+      "H2O": 30.0,
+      "CH4": 2.0,
+      "NH3": 0.3,
+      "temperature": 1400.0,
+      "radius": 0.8
+    },
+    "1103784": {
+      "CO2": 100.0,
+      "H2O": 30.0,
+      "CH4": 2.0,
+      "NH3": 0.3,
+      "temperature": 1400.0,
+      "radius": 0.8093348187208176
+    }
+  }
+}
