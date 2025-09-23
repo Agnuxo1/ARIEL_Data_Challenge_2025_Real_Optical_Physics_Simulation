@@ -1,0 +1,128 @@
+# Makefile for Hybrid Quantum-NEBULA Ariel Model
+# Requires: CUDA, ITensor, cnpy, BLAS/LAPACK
+
+# Compiler settings
+CXX = g++
+NVCC = nvcc
+CXXFLAGS = -std=c++17 -O3 -march=native -fopenmp
+NVCCFLAGS = -std=c++17 -O3 -arch=sm_70 --use_fast_math
+
+# Paths (adjust for your system)
+CUDA_PATH = /usr/local/cuda
+ITENSOR_PATH = $(HOME)/itensor
+CNPY_PATH = $(HOME)/cnpy
+
+# Include directories
+INCLUDES = -I$(CUDA_PATH)/include \
+           -I$(ITENSOR_PATH) \
+           -I$(CNPY_PATH) \
+           -I.
+
+# Library directories
+LIB_DIRS = -L$(CUDA_PATH)/lib64 \
+           -L$(ITENSOR_PATH)/lib \
+           -L$(CNPY_PATH) \
+           -L/usr/lib/x86_64-linux-gnu \
+           -L/usr/lib/x86_64-linux-gnu/blas
+
+# Libraries
+LIBS = -lcudart -lcufft -lcublas \
+       -litensor -l:libblas.so.3 -l:liblapack.so.3 \
+       -lcnpy -lz \
+       -lpthread -lm
+
+# Source files
+SOURCES = ariel_trainer.cu
+CUDA_SOURCES = nebula_kernels.cu
+
+# Object files
+OBJECTS = $(SOURCES:.cu=.o)
+CUDA_OBJECTS = $(CUDA_SOURCES:.cu=.o)
+
+# Headers
+HEADERS = hybrid_ariel_model.hpp \
+          ariel_data_loader.hpp
+
+# Target executable
+TARGET = ariel_trainer
+
+# Build rules
+all: $(TARGET)
+
+$(TARGET): $(OBJECTS) $(CUDA_OBJECTS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -Wl,-rpath,/home/nebula/cnpy -Wl,-rpath,/home/nebula/itensor/lib -o $@ $^ $(LIB_DIRS) $(LIBS)
+
+%.o: %.cpp $(HEADERS)
+	$(NVCC) $(NVCCFLAGS) $(INCLUDES) -c $< -o $@
+
+%.o: %.cu
+	$(NVCC) $(NVCCFLAGS) $(INCLUDES) -c $< -o $@
+
+
+
+# Clean build
+clean:
+	rm -f $(OBJECTS) $(CUDA_OBJECTS) $(TARGET)
+	rm -rf outputs/
+
+# Install dependencies
+install-deps:
+	@echo "Installing dependencies..."
+	@echo "1. ITensor:"
+	@echo "   git clone https://github.com/ITensor/ITensor ~/itensor"
+	@echo "   cd ~/itensor && make"
+	@echo ""
+	@echo "2. cnpy (numpy loader for C++):"
+	@echo "   git clone https://github.com/rogersce/cnpy ~/cnpy"
+	@echo "   cd ~/cnpy && cmake . && make"
+	@echo ""
+	@echo "3. CUDA Toolkit:"
+	@echo "   Download from https://developer.nvidia.com/cuda-toolkit"
+	@echo ""
+	@echo "4. BLAS/LAPACK:"
+	@echo "   sudo apt-get install libblas-dev liblapack-dev"
+
+# Run training
+train: $(TARGET)
+	./$(TARGET) --data "E:/NeurIPS_MYCELIUM_EVOLUTUM/ariel-data-challenge-2025" \
+	            --epochs 100 \
+	            --batch 32 \
+	            --lr 0.001 \
+	            --output ./outputs
+
+# Quick test run
+test: $(TARGET)
+	./$(TARGET) --data "E:/NeurIPS_MYCELIUM_EVOLUTUM/ariel-data-challenge-2025" \
+	            --epochs 1 \
+	            --batch 8 \
+	            --lr 0.001 \
+	            --output ./test_outputs
+
+# Generate submission
+submit: $(TARGET)
+	@echo "Generating Kaggle submission..."
+	./$(TARGET) --data "E:/NeurIPS_MYCELIUM_EVOLUTUM/ariel-data-challenge-2025" \
+	            --epochs 0 \
+	            --output ./submission
+	@echo "Submission ready at: ./submission/kaggle_submission.csv"
+
+# Profile with nvprof
+profile: $(TARGET)
+	nvprof --print-gpu-trace ./$(TARGET) --epochs 1 --batch 4
+
+# Help
+help:
+	@echo "Hybrid Quantum-NEBULA Model for Ariel Data Challenge 2025"
+	@echo ""
+	@echo "Usage:"
+	@echo "  make            - Build the model"
+	@echo "  make train      - Train on full dataset"
+	@echo "  make test       - Quick test run"
+	@echo "  make submit     - Generate Kaggle submission"
+	@echo "  make clean      - Clean build files"
+	@echo "  make install-deps - Show dependency installation instructions"
+	@echo ""
+	@echo "Training options:"
+	@echo "  ./ariel_trainer --data <path> --epochs <n> --batch <n> --lr <f>"
+
+.PHONY: all clean install-deps train test submit profile help nebula_kernels.cu

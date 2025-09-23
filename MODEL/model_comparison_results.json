@@ -1,0 +1,5 @@
+{
+  "base_model": {
+    "model": "Base Model (FINAL_CONVERGENCE_FIXED)",
+    "total_epochs": 1000,
+    "final_train_loss": 
