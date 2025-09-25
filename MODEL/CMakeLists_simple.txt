@@ -1,24 +1,12 @@
 cmake_minimum_required(VERSION 3.18)
-project(ArielHybridModel LANGUAGES CXX CUDA)
+project(ArielSimpleModel LANGUAGES CXX)
 
-# Set C++ and CUDA standards
+# Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CUDA_STANDARD 14)
-set(CMAKE_CUDA_STANDARD_REQUIRED ON)
-
-# Set CUDA architectures for modern GPUs
-set(CMAKE_CUDA_ARCHITECTURES 70 75 80 86 89 90)
 
 # Configure for Windows Environment
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
-
-# Set CUDA toolkit path
-set(CMAKE_CUDA_COMPILER "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.6/bin/nvcc.exe")
-
-# Find CUDA
-find_package(CUDAToolkit REQUIRED)
-message(STATUS "Found CUDA Toolkit: ${CUDAToolkit_VERSION}")
 
 # Set dependency paths
 set(EIGEN_DIR "E:/eigen-3.4.0")
@@ -36,25 +24,19 @@ include_directories(
 )
 
 # Add the main executable
-add_executable(ariel_trainer
-    ariel_trainer.cpp
-    nebula_kernels.cu
+add_executable(simple_ariel_trainer
+    simple_ariel_trainer.cpp
 )
 
 # Set target properties
-set_target_properties(ariel_trainer PROPERTIES
-    CUDA_STANDARD 14
-    CUDA_STANDARD_REQUIRED ON
+set_target_properties(simple_ariel_trainer PROPERTIES
     CXX_STANDARD 17
     CXX_STANDARD_REQUIRED ON
 )
 
 # Link libraries
-target_link_libraries(ariel_trainer
+target_link_libraries(simple_ariel_trainer
     PRIVATE
-    CUDA::cudart
-    CUDA::cufft
-    CUDA::cublas
     ${CNPY_DIR}/Release/cnpy.lib
     ${OPENBLAS_DIR}/lib/libopenblas.lib
     ${ZLIB_DIR}/lib/z.lib

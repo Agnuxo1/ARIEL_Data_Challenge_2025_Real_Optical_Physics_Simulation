@@ -37,7 +37,7 @@ public:
 
         n_samples = targets_npy.shape[0];
         n_time = 187;           // Standard ARIEL time bins
-        n_wavelengths = 282;    // Standard ARIEL wavelengths
+        n_wavelengths = 283;    // Standard ARIEL wavelengths
         n_pixels = 32;          // Standard ARIEL spatial pixels
 
         std::cout << "  Training samples: " << n_samples << std::endl;
@@ -71,21 +71,22 @@ public:
         // Try to load from calibrated numpy files first, fall back to synthetic
         std::vector<float> spectrum(n_wavelengths);
 
-        try {
-            // Try loading the calibrated data first
-            static bool data_loaded = false;
-            static cnpy::NpyArray airs_data;
+        // Load calibrated data directly (no fallback)
+        static bool data_loaded = false;
+        static cnpy::NpyArray airs_data;
 
-            if (!data_loaded) {
-                try {
-                    airs_data = cnpy::npy_load(data_path + "/data_train.npy");
-                    data_loaded = true;
-                    std::cout << "[LOADER] Using calibrated ARIEL data with shape: "
-                              << airs_data.shape[0] << "x" << airs_data.shape[1] << std::endl;
-                } catch(...) {
-                    throw; // Re-throw to use fallback
-                }
+        if (!data_loaded) {
+            airs_data = cnpy::npy_load(data_path + "/data_train.npy");
+            data_loaded = true;
+            std::cout << "[LOADER] Using calibrated ARIEL data with shape rank "
+                      << airs_data.shape.size();
+            std::cout << " [";
+            for(size_t d = 0; d < airs_data.shape.size(); ++d) {
+                std::cout << airs_data.shape[d];
+                if(d + 1 < airs_data.shape.size()) std::cout << " x ";
             }
+            std::cout << "]" << std::endl;
+        }
 
             float* airs_ptr = airs_data.data<float>();
 
@@ -100,8 +101,25 @@ public:
                 for(int w = spectrum_size; w < n_wavelengths; ++w) {
                     spectrum[w] = 0.0;
                 }
+        } else if (airs_data.shape.size() == 3) {
+            // Calibrated 3D format: (samples, time, wavelengths)
+            int time_dim = airs_data.shape[1];
+            int wave_dim = airs_data.shape[2];
+            int spectrum_size = std::min(wave_dim, n_wavelengths);
+            for(int w = 0; w < spectrum_size; ++w) {
+                float sum = 0.0f;
+                for(int t = 0; t < time_dim; ++t) {
+                    int idx = sample_idx * time_dim * wave_dim + t * wave_dim + w;
+                    sum += airs_ptr[idx];
+                }
+                spectrum[w] = sum / std::max(1, time_dim);
+            }
+            for(int w = spectrum_size; w < n_wavelengths; ++w) {
+                spectrum[w] = 0.0f;
+            }
             } else {
                 // Original 4D format: (samples, time, wavelengths, pixels)
+                std::cout << "[LOADER] Falling back to 4D data path" << std::endl;
                 for(int w = 0; w < n_wavelengths; ++w) {
                     float sum = 0.0;
                     int t = 0; // Use first time step only
@@ -114,30 +132,6 @@ public:
                     spectrum[w] = sum / n_pixels;
                 }
             }
-        } catch(...) {
-            // Fallback to synthetic data if loading fails
-            static bool fallback_warned = false;
-            if (!fallback_warned) {
-                std::cout << "[LOADER] Using synthetic data (calibrated data not available yet)" << std::endl;
-                fallback_warned = true;
-            }
-            std::mt19937 gen(sample_idx + 12345);
-            std::normal_distribution<float> noise(0.0, 0.01);
-
-            for(int w = 0; w < n_wavelengths; ++w) {
-                float wavelength = 0.5 + 2.5 * w / n_wavelengths; // 0.5-3.0 microns
-
-                // Base continuum
-                float continuum = 1.0 - 0.2 * wavelength;
-
-                // Add absorption lines (molecular signatures)
-                if(wavelength > 1.3 && wavelength < 1.5) continuum *= 0.8; // H2O
-                if(wavelength > 1.6 && wavelength < 1.8) continuum *= 0.85; // CH4
-                if(wavelength > 2.0 && wavelength < 2.1) continuum *= 0.9; // CO2
-
-                spectrum[w] = continuum + noise(gen);
-            }
-        }
 
         // Return spectrum and targets
         return {spectrum, all_targets[sample_idx]};
@@ -164,12 +158,16 @@ public:
         }
 
         bool hasNext() const {
-            return current_idx < indices.size();
+            bool has = current_idx < indices.size();
+            return has;
         }
 
         std::pair<std::vector<std::vector<float>>, std::vector<std::vector<float>>>
         next() {
             size_t end_idx = std::min(current_idx + batch_size, indices.size());
+            if(end_idx == current_idx) {
+                throw std::runtime_error("BatchIterator next() called with no remaining samples");
+            }
 
             std::vector<std::vector<float>> batch_x;
             std::vector<std::vector<float>> batch_y;

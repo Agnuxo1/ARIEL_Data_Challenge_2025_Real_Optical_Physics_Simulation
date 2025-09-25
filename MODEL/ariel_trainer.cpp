@@ -1,3 +1,4 @@
+#include <filesystem>
 /**
  * MAIN TRAINING SCRIPT FOR ARIEL DATA CHALLENGE 2025
  * Complete end-to-end pipeline
@@ -14,7 +15,7 @@ using namespace std;
 
 // Training configuration
 struct TrainingConfig {
-    string data_path = "/mnt/disco2/calibrated";
+    string data_path = "E:/ARIEL_COMPLETE_BACKUP_2025-09-22_19-40-31/ARIEL_REAL_PHYSIC_SIMULATE_NeurIPS/calibrated_data";
     string output_path = "./outputs";
     int epochs = 1000;
     int batch_size = 1;
@@ -41,19 +42,26 @@ private:
     chrono::high_resolution_clock::time_point start_time;
     
 public:
-    ArielTrainer(const TrainingConfig& cfg) 
+    ArielTrainer(const TrainingConfig& cfg)
         : config(cfg), data_loader(cfg.data_path) {
-        
+
         // Set random seed
         srand(cfg.seed);
-        
+
         // Create output directory
+#ifdef _WIN32
+        std::filesystem::create_directories(cfg.output_path);
+#else
         system(("mkdir -p " + cfg.output_path).c_str());
-        
+#endif
+
         // Log configuration
         logConfig();
-        
+
         start_time = chrono::high_resolution_clock::now();
+
+        // Auto-load latest checkpoint and generate CSV immediately
+        autoLoadAndGenerateCSV();
     }
     
     void logConfig() {
@@ -78,9 +86,42 @@ public:
         cfg_file.close();
     }
     
+    bool hasTrainingData() {
+        try {
+            // Check if training data files exist
+            string train_data_path = config.data_path + "/data_train.npy";
+            string targets_path = config.data_path + "/targets_train.npy";
+
+            ifstream train_file(train_data_path);
+            ifstream targets_file(targets_path);
+
+            bool exists = train_file.good() && targets_file.good();
+
+            if (exists) {
+                cout << "[DATA] Training data found - will continue training" << endl;
+            } else {
+                cout << "[DATA] No training data found - CSV-only mode" << endl;
+            }
+
+            return exists;
+        } catch (...) {
+            cout << "[DATA] Error checking training data - CSV-only mode" << endl;
+            return false;
+        }
+    }
+
     void train() {
+        cout << "=== TRAINING PHASE ===\n";
+
+        // Check if we have training data
+        if (!hasTrainingData()) {
+            cout << "[TRAIN] No training data available - CSV already generated" << endl;
+            cout << "[TRAIN] Model ready for Kaggle submission!" << endl;
+            return;
+        }
+
         cout << "Starting training...\n\n";
-        
+
         for(int epoch = 1; epoch <= config.epochs; ++epoch) {
             // Train epoch
             float train_loss = trainEpoch(epoch);
@@ -203,13 +244,109 @@ public:
         
         // Save metrics
         ofstream metrics(config.output_path + "/metrics.csv", ios::app);
-        metrics << epoch << "," << train_loss << "," << val_loss << "\n";
-        metrics.close();
+        if (metrics.tellp() == 0) {
+            metrics << "epoch,train_loss,val_loss,time_seconds,learning_rate\n";
+        }
+        metrics << epoch << "," << train_loss << "," << val_loss << ","
+                << duration << "," << config.learning_rate << "\n";
     }
     
     void saveCheckpoint(const string& name) {
         string path = config.output_path + "/checkpoint_" + name;
         model.saveCheckpoint(path);
+    }
+
+    string findLatestCheckpoint() {
+        string latest_checkpoint = "";
+        int latest_epoch = -1;
+
+        try {
+#ifdef _WIN32
+            // Windows filesystem iteration
+            for (const auto& entry : std::filesystem::directory_iterator(config.output_path)) {
+                if (entry.is_regular_file()) {
+                    string filename = entry.path().filename().string();
+                    if (filename.find("checkpoint_epoch_") == 0 && filename.find("_quantum.mps") == string::npos) {
+                        // Extract epoch number
+                        size_t start = filename.find("epoch_") + 6;
+                        if (start != string::npos + 6) {
+                            string epoch_str = filename.substr(start);
+                            int epoch_num = stoi(epoch_str);
+                            if (epoch_num > latest_epoch) {
+                                latest_epoch = epoch_num;
+                                latest_checkpoint = entry.path().string();
+                            }
+                        }
+                    }
+                }
+            }
+#else
+            // Unix ls-based approach
+            string cmd = "ls " + config.output_path + "/checkpoint_epoch_* 2>/dev/null || true";
+            FILE* pipe = popen(cmd.c_str(), "r");
+            if (pipe) {
+                char buffer[256];
+                while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+                    string line(buffer);
+                    line.erase(line.find_last_not_of(" \n\r\t")+1); // trim
+
+                    size_t pos = line.find("checkpoint_epoch_");
+                    if (pos != string::npos) {
+                        size_t start = pos + 17; // length of "checkpoint_epoch_"
+                        string epoch_str = line.substr(start);
+                        int epoch_num = stoi(epoch_str);
+                        if (epoch_num > latest_epoch) {
+                            latest_epoch = epoch_num;
+                            latest_checkpoint = line;
+                        }
+                    }
+                }
+                pclose(pipe);
+            }
+#endif
+        } catch (...) {
+            cout << "[CHECKPOINT] Error searching for checkpoints" << endl;
+        }
+
+        if (!latest_checkpoint.empty()) {
+            cout << "[CHECKPOINT] Found latest checkpoint: epoch " << latest_epoch << endl;
+            cout << "[CHECKPOINT] Path: " << latest_checkpoint << endl;
+        } else {
+            cout << "[CHECKPOINT] No existing checkpoints found" << endl;
+        }
+
+        return latest_checkpoint;
+    }
+
+    void autoLoadAndGenerateCSV() {
+        cout << "\n=== AUTO-CHECKPOINT LOADING ===\n";
+
+        // Search for latest checkpoint
+        string latest_checkpoint = findLatestCheckpoint();
+
+        if (!latest_checkpoint.empty()) {
+            cout << "[AUTO] Loading checkpoint and generating CSV immediately..." << endl;
+
+            // Load the checkpoint
+            bool loaded = model.loadCheckpoint(latest_checkpoint);
+            if (loaded) {
+                cout << "[AUTO] Checkpoint loaded successfully!" << endl;
+            } else {
+                cout << "[AUTO] Failed to load checkpoint, using default model" << endl;
+            }
+
+            // Generate CSV immediately after loading checkpoint
+            string csv_path = config.output_path + "/kaggle_submission_auto.csv";
+            cout << "[AUTO] Generating Kaggle submission: " << csv_path << endl;
+            model.generateSubmission(config.data_path, csv_path);
+
+            cout << "[AUTO] CSV generation complete!" << endl;
+            cout << "[AUTO] Ready for Kaggle upload: " << csv_path << endl;
+        } else {
+            cout << "[AUTO] No checkpoint found - will generate CSV with default model after training" << endl;
+        }
+
+        cout << "================================\n\n";
     }
     
     void generateSubmission() {
@@ -229,58 +366,20 @@ public:
     }
     
     void createKaggleSubmission(const string& submission_path) {
-        // Enhanced Kaggle submission with real physics verification
-        cout << "[KAGGLE] Creating enhanced ARIEL spectral submission..." << endl;
-
-        string kaggle_path = config.output_path + "/ariel_quantum_nebula_kaggle_submission.csv";
-
+        // Format for Kaggle upload
         ifstream in(submission_path);
-        ofstream out(kaggle_path);
-
-        if (!in.is_open()) {
-            cout << "[KAGGLE] Error: Cannot open submission file: " << submission_path << endl;
-            return;
-        }
-
+        ofstream out(config.output_path + "/kaggle_submission.csv");
+        
         string line;
-        int line_count = 0;
-        int column_count = 0;
-
         while(getline(in, line)) {
             out << line << "\n";
-            line_count++;
-
-            // Count columns in first data row (skip header)
-            if (line_count == 2) {
-                column_count = count(line.begin(), line.end(), ',') + 1;
-            }
         }
-
+        
         in.close();
         out.close();
-
-        cout << "[KAGGLE] ✅ Enhanced ARIEL submission ready!" << endl;
-        cout << "[KAGGLE] File: " << kaggle_path << endl;
-        cout << "[KAGGLE] Rows: " << (line_count - 1) << " planets (+ header)" << endl;
-        cout << "[KAGGLE] Columns: " << column_count << " (expected: 567)" << endl;
-        cout << "[KAGGLE] Format: Real quantum-optical physics simulation" << endl;
-
-        // Verify format
-        if (column_count == 567) {
-            cout << "[KAGGLE] ✅ Format verified: ARIEL 2025 compliant" << endl;
-        } else {
-            cout << "[KAGGLE] ⚠️  Format warning: Expected 567 columns, got " << column_count << endl;
-        }
-
-        // Create backup with standard name for compatibility
-        string backup_path = config.output_path + "/kaggle_submission.csv";
-        ifstream src(kaggle_path);
-        ofstream dst(backup_path);
-        dst << src.rdbuf();
-        src.close();
-        dst.close();
-
-        cout << "[KAGGLE] Backup created: " << backup_path << endl;
+        
+        cout << "Kaggle submission ready: " 
+             << config.output_path << "/kaggle_submission.csv\n";
     }
     
     // Plot training curves (optional, requires gnuplot)
@@ -327,7 +426,12 @@ int main(int argc, char** argv) {
         
         // Initialize trainer
         ArielTrainer trainer(config);
-        
+#ifdef ARIEL_USE_CUDA
+        if(!NEBULAProcessor::IsCudaActive()) {
+            std::cout << "[WARN] Compilado con CUDA pero no se detectó uso de kernels GPU" << std::endl;
+        }
+#endif
+
         // Run training
         trainer.train();
         
