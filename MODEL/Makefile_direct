@@ -1,0 +1,62 @@
+# Direct compilation Makefile for ARIEL Hybrid Model
+# Compiles C++/CUDA directly without CMake
+
+# Compilers
+NVCC = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6\bin\nvcc.exe"
+CL = cl
+
+# Directories
+EIGEN_DIR = E:/eigen-3.4.0
+CNPY_DIR = C:/cnpy
+OPENBLAS_DIR = E:/openblas_install
+ZLIB_DIR = C:/zlib_install
+
+# Include paths
+INCLUDES = -I$(EIGEN_DIR) -I$(CNPY_DIR) -I$(OPENBLAS_DIR)/include -I$(ZLIB_DIR)/include
+
+# Libraries
+LIBS = $(CNPY_DIR)/Release/cnpy.lib $(OPENBLAS_DIR)/lib/libopenblas.lib $(ZLIB_DIR)/lib/z.lib
+
+# CUDA flags
+NVCC_FLAGS = -std=c++14 -O2 -arch=sm_70,sm_75,sm_80,sm_86,sm_89,sm_90
+NVCC_FLAGS += -Xcompiler "/std:c++17 /O2 /EHsc"
+
+# C++ flags
+CL_FLAGS = /std:c++17 /O2 /EHsc
+
+# Target
+TARGET = ariel_trainer.exe
+
+# Source files
+CPP_SOURCES = ariel_trainer.cpp
+CUDA_SOURCES = nebula_kernels.cu
+HEADERS = hybrid_ariel_model.hpp ariel_data_loader_lazy.hpp
+
+# Object files
+CPP_OBJ = ariel_trainer.obj
+CUDA_OBJ = nebula_kernels.obj
+
+# Default target
+all: $(TARGET)
+
+# Compile CUDA source
+$(CUDA_OBJ): $(CUDA_SOURCES) $(HEADERS)
+	$(NVCC) $(NVCC_FLAGS) $(INCLUDES) -c $(CUDA_SOURCES) -o $(CUDA_OBJ)
+
+# Compile C++ source
+$(CPP_OBJ): $(CPP_SOURCES) $(HEADERS)
+	$(CL) $(CL_FLAGS) $(INCLUDES) -c $(CPP_SOURCES) -Fo$(CPP_OBJ)
+
+# Link everything
+$(TARGET): $(CPP_OBJ) $(CUDA_OBJ)
+	$(CL) $(CL_FLAGS) $(CPP_OBJ) $(CUDA_OBJ) $(LIBS) -Fe$(TARGET)
+
+# Clean
+clean:
+	del *.obj *.exe
+
+# Run
+run: $(TARGET)
+	$(TARGET) --data "./calibrated_data" --epochs 10 --output "./test_output"
+
+.PHONY: all clean run
